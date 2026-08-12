@@ -21,6 +21,10 @@ def format_regression_title(original_title: str) -> str:
 def render_test_cases_tab(project_id: str):
     st.subheader("📋 Gestão e Execução de Casos de Teste")
     
+    # Recupera informações do usuário logado e seu papel na equipe atual
+    user_info = st.session_state.get("user", {})
+    user_role = user_info.get("role", "editor")
+    
     # --- SELETOR GLOBAL DE CICLO ATIVO PARA CRIAÇÃO/FILTRAGEM ---
     col_c1, col_c2 = st.columns([2, 1])
     with col_c1:
@@ -117,7 +121,6 @@ def render_test_cases_tab(project_id: str):
                     else:
                         st.error("Falha ao gerar o caso de teste pela IA.")
         else:
-            # Formulário Manual ajustado para seguir rigorosamente o padrão ISTQB
             with st.form("manual_tc_form", clear_on_submit=True):
                 st.markdown("📝 **Preencha os campos abaixo seguindo as boas práticas ISTQB:**")
                 title = st.text_input("Título do Caso de Teste *", placeholder="Ex: CT01 - Validação de login com senha inválida")
@@ -238,9 +241,12 @@ def render_test_cases_tab(project_id: str):
                             st.rerun()
                     
                     with c_del:
-                        if st.button("🗑️ Excluir", key=f"btn_tc_del_{tc['id']}", type="primary"):
-                            supabase.table("test_cases").delete().eq('id', tc['id']).execute()
-                            st.rerun()
+                        if user_role in ["admin", "owner"]:
+                            if st.button("🗑️ Excluir", key=f"btn_tc_del_{tc['id']}", type="primary"):
+                                supabase.table("test_cases").delete().eq('id', tc['id']).execute()
+                                st.rerun()
+                        else:
+                            st.caption("🔒 Exclusão restrita")
 
                 with col_act:
                     st.write(f"**Status:** {status}")
@@ -263,6 +269,9 @@ def render_test_cases_tab(project_id: str):
 
 def render_bug_reports_tab(project_id: str):
     st.subheader("🐛 Registro e Gestão de Bugs")
+    
+    user_info = st.session_state.get("user", {})
+    user_role = user_info.get("role", "editor")
     
     # Campo para definir o ciclo do bug atual
     bug_cycle_input = st.text_input(
@@ -308,7 +317,6 @@ def render_bug_reports_tab(project_id: str):
                 else:
                     st.warning("Escreva a descrição do problema encontrado.")
         else:
-            # Formulário Manual ajustado estritamente ao padrão IEEE 829 / ISTQB
             with st.form("bug_report_form", clear_on_submit=True):
                 st.markdown("📝 **Preencha os dados do defeito conforme as diretrizes ISTQB/IEEE 829:**")
                 title = st.text_input("Título do Bug *", placeholder="Ex: Erro 500 ao submeter o formulário de cadastro")
@@ -343,7 +351,6 @@ def render_bug_reports_tab(project_id: str):
     # --- FILTROS DE BUGS (CICLO E STATUS) ---
     col_bf1, col_bf2 = st.columns(2)
     with col_bf1:
-        # Busca ciclos de bugs cadastrados para o filtro
         existing_bug_cycles_res = supabase.table("bug_reports").select("test_cycle").eq("project_id", project_id).execute()
         bug_cycles_list = sorted(list(set([row.get("test_cycle", "Geral") for row in (existing_bug_cycles_res.data or [])])))
         if "Geral" not in bug_cycles_list:
@@ -435,9 +442,12 @@ def render_bug_reports_tab(project_id: str):
                             st.rerun()
                 
                 with c_del:
-                    if st.button("🗑️ Excluir", key=f"btn_bug_del_{bug['id']}", type="primary"):
-                        supabase.table("bug_reports").delete().eq('id', bug['id']).execute()
-                        st.rerun()
+                    if user_role in ["admin", "owner"]:
+                        if st.button("🗑️ Excluir", key=f"btn_bug_del_{bug['id']}", type="primary"):
+                            supabase.table("bug_reports").delete().eq('id', bug['id']).execute()
+                            st.rerun()
+                    else:
+                        st.caption("🔒 Exclusão restrita")
 
 def render_testing_module(project_id: str):
     if not project_id:
