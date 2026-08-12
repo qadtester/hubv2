@@ -142,7 +142,12 @@ def render_projects_page():
                                 confirm_text = st.text_input("Digite 'EXCLUIR' para confirmar:", key=f"conf_del_p_{proj['id']}")
                                 if st.button("Confirmar Exclusão", type="primary", key=f"btn_del_p_{proj['id']}"):
                                     if confirm_text == "EXCLUIR":
+                                        # Limpa os documentos vinculados antes de excluir o projeto
+                                        supabase.table("project_documents").delete().eq("project_id", proj['id']).execute()
+                                        
+                                        # Exclui o projeto com segurança
                                         supabase.table("projects").delete().eq("id", proj['id']).execute()
+                                        
                                         if st.session_state.get("current_project_id") == proj['id']:
                                             st.session_state["current_project_id"] = None
                                         st.success("Projeto e dados excluídos com sucesso!")
