@@ -182,7 +182,7 @@ elif page == "📊 Métricas & Exportação":
 
 elif page == "👥 Gestão de Equipe":
     st.title("👥 Gestão de Membros da Organização")
-    st.write(f"Gerencie os usuários vinculados à organização ativa **{active_team.get('name')}**.")
+    st.write(f"Gerencie os usuários e permissões da organização ativa **{active_team.get('name')}**.")
     
     # Busca membros na tabela team_members cruzando com a tabela users
     members_res = (
@@ -206,16 +206,38 @@ elif page == "👥 Gestão de Equipe":
             st.write(f"**{member['name']}**")
             st.caption(member['email'])
         with cols[1]:
-            st.write(f"Papel: `{member['role']}`")
+            # Se for o próprio usuário logado ou dono, exibe o cargo de forma fixa ou controlada
+            is_self = (member["id"] == user_info["id"])
+            
+            # Opção de alterar o papel diretamente na interface
+            available_roles = ["editor", "admin"]
+            current_role_index = available_roles.index(member["role"]) if member["role"] in available_roles else 0
+            
+            new_role = st.selectbox(
+                "Papel", 
+                options=available_roles, 
+                index=current_role_index, 
+                key=f"role_{member['id']}",
+                label_visibility="collapsed"
+            )
+            
+            # Se o admin mudou o papel na interface, atualiza no Supabase
+            if new_role != member["role"]:
+                if is_self:
+                    st.warning("Você não pode alterar seu próprio cargo.")
+                else:
+                    supabase.table("team_members").update({"role": new_role}).eq("team_id", active_team["id"]).eq("user_id", member["id"]).execute()
+                    st.success(f"Cargo de {member['name']} alterado para {new_role}!")
+                    st.rerun()
+                    
         with cols[2]:
-            st.write(f"Criado em: {member['created_at'][:10] if member.get('created_at') else ''}")
+            st.write(f"Entrou em: {member['created_at'][:10] if member.get('created_at') else ''}")
         with cols[3]:
             # Impede o admin de se remover a si mesmo por engano nesta tela
-            if member["id"] != user_info["id"]:
+            if not is_self:
                 if st.button("🗑️ Remover", key=f"rm_mem_{member['id']}"):
-                    # Remove da tabela de relacionamento team_members (não deleta o usuário do sistema)
                     supabase.table("team_members").delete().eq("team_id", active_team["id"]).eq("user_id", member["id"]).execute()
                     st.success(f"Usuário {member['name']} removido da equipe.")
                     st.rerun()
             else:
-                st.caption("Você (Admin)")
+                st.caption("Você (Ativo)")
