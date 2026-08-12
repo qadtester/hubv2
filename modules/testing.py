@@ -25,24 +25,31 @@ def render_test_cases_tab(project_id: str):
     user_info = st.session_state.get("user", {})
     user_role = user_info.get("role", "editor")
     
-    # --- SELETOR GLOBAL DE CICLO ATIVO PARA CRIAÇÃO/FILTRAGEM ---
+    # --- SELETOR GLOBAL DE CICLO ATIVO PARA CRIAÇÃO/FILTRAGEM (AJUSTADO) ---
     col_c1, col_c2 = st.columns([2, 1])
     with col_c1:
         current_cycle = st.text_input(
-            "🏷️ Ciclo de Teste Atual / Release:", 
-            value="Geral", 
-            help="Ex: Release 1.0, Sprint 12, Pós-Deploy v1.1. Todos os novos testes criados irão para este ciclo."
+            "🏷️ Ciclo de Teste Atual / Release *", 
+            value="", 
+            placeholder="Ex: Release 1.0, Sprint 12, Pós-Deploy v1.1",
+            help="⚠️ Campo obrigatório. Informe o ciclo ou release atual para segmentar seus testes corretamente."
         )
+    
+    active_cycle = current_cycle.strip()
+
     with col_c2:
-        # Busca ciclos existentes no projeto para facilitar o filtro rápido
+        # Busca ciclos existentes no projeto (excluindo valores vazios ou legados "Geral" indesejados)
         existing_cycles_res = supabase.table("test_cases").select("test_cycle").eq("project_id", project_id).execute()
-        cycles_list = sorted(list(set([row.get("test_cycle", "Geral") for row in (existing_cycles_res.data or [])])))
-        if "Geral" not in cycles_list:
-            cycles_list.insert(0, "Geral")
+        cycles_list = sorted(list(set([row.get("test_cycle") for row in (existing_cycles_res.data or []) if row.get("test_cycle") and row.get("test_cycle").strip()])))
+
+    # Validação de boas práticas de QA
+    if not active_cycle:
+        st.warning("💡 **Boa prática de QA:** Por favor, preencha o campo **Ciclo de Teste / Release** acima para garantir a rastreabilidade correta dos seus testes e métricas.")
+        return # Interrompe a renderização até que o ciclo seja preenchido
 
     # --- GERAÇÃO EM MASSA VIA IA ---
     with st.expander("🚀 Geração Inteligente de Suíte Completa via IA (Múltiplos Testes)", expanded=False):
-        st.info(f"💡 A IA fará a leitura completa do documento do projeto e gerará a suíte atribuindo ao ciclo: **{current_cycle}**")
+        st.info(f"💡 A IA fará a leitura completa do documento do projeto e gerará a suíte atribuindo ao ciclo: **{active_cycle}**")
         
         foco_lote = st.text_input("Foco opcional para a suíte (ex: Priorizar testes de segurança e login):", key="batch_ai_foco")
         
@@ -65,7 +72,7 @@ def render_test_cases_tab(project_id: str):
                             "steps": item.get("steps", ""),
                             "expected_result": item.get("expected_result", ""),
                             "status": "Não Executado",
-                            "test_cycle": current_cycle
+                            "test_cycle": active_cycle
                         }
                         try:
                             supabase.table("test_cases").insert(payload).execute()
@@ -74,7 +81,7 @@ def render_test_cases_tab(project_id: str):
                             pass
                     
                     if sucesso_count > 0:
-                        st.success(f"Suíte gerada com sucesso! {sucesso_count} casos de teste adicionados ao ciclo `{current_cycle}`.")
+                        st.success(f"Suíte gerada com sucesso! {sucesso_count} casos de teste adicionados ao ciclo `{active_cycle}`.")
                         st.rerun()
                     else:
                         st.error("Houve um erro ao salvar os casos de teste gerados no Supabase.")
@@ -89,7 +96,7 @@ def render_test_cases_tab(project_id: str):
         test_type = st.selectbox("Tipo de Teste", ["Funcional", "Regressão", "Smoke", "Não-Funcional"], key="tc_type_select")
         
         if mode == "Com IA (Unitário)":
-            st.info(f"💡 A IA lerá o documento e salvará no ciclo: **{current_cycle}**")
+            st.info(f"💡 A IA lerá o documento e salvará no ciclo: **{active_cycle}**")
             user_story = st.text_area("O que deseja testar? (ex: tela de login, fluxo de carrinho...):", placeholder="Ex: Validar se o usuário consegue logar com credenciais inválidas...", key="tc_ai_prompt")
             
             if st.button("✨ Gerar e Salvar Caso de Teste via IA", type="primary", key="btn_gen_tc_ai"):
@@ -109,7 +116,7 @@ def render_test_cases_tab(project_id: str):
                             "steps": data.get("steps", ""),
                             "expected_result": data.get("expected_result", ""),
                             "status": "Não Executado",
-                            "test_cycle": current_cycle
+                            "test_cycle": active_cycle
                         }
                         
                         try:
@@ -138,7 +145,7 @@ def render_test_cases_tab(project_id: str):
                             "steps": steps,
                             "expected_result": expected_result, 
                             "status": "Não Executado",
-                            "test_cycle": current_cycle
+                            "test_cycle": active_cycle
                         }
                         try:
                             supabase.table("test_cases").insert(payload).execute()
@@ -151,7 +158,7 @@ def render_test_cases_tab(project_id: str):
 
     st.divider()
     
-    # --- FILTROS DE SUÍTE (TIPO E CICLO) ---
+    # --- FILTROS DE SUÍTE (TIPO E CICLO - SEM "GERAL" FIXO) ---
     st.markdown("### Suíte de Testes")
     col_f1, col_f2 = st.columns(2)
     with col_f1:
@@ -195,7 +202,7 @@ def render_test_cases_tab(project_id: str):
 
         for tc in test_cases:
             status = tc.get("status", "Não Executado")
-            cycle_tag = tc.get("test_cycle", "Geral")
+            cycle_tag = tc.get("test_cycle", "Sem Ciclo")
             status_icon = "🟢" if status == "Passou" else ("🔴" if status == "Falhou" else ("🟡" if status == "Bloqueado" else "⚪"))
 
             with st.expander(f"{status_icon} [{tc.get('test_type', 'Teste')}] ({cycle_tag}) - {tc.get('title')}"):
@@ -213,15 +220,18 @@ def render_test_cases_tab(project_id: str):
                     with c_edit:
                         with st.popover("✏️ Editar", key=f"pop_edit_tc_{tc['id']}"):
                             e_title = st.text_input("Título", value=tc['title'], key=f"e_tc_t_{tc['id']}")
-                            e_cycle = st.text_input("Ciclo", value=cycle_tag, key=f"e_tc_c_{tc['id']}")
+                            e_cycle = st.text_input("Ciclo *", value=cycle_tag, key=f"e_tc_c_{tc['id']}")
                             e_pre = st.text_area("Pré-condições", value=tc.get('preconditions', ''), key=f"e_tc_p_{tc['id']}")
                             e_steps = st.text_area("Passos", value=tc.get('steps', ''), key=f"e_tc_s_{tc['id']}")
                             e_exp = st.text_area("Esperado", value=tc.get('expected_result', ''), key=f"e_tc_e_{tc['id']}")
                             if st.button("Salvar Alterações", key=f"btn_tc_edit_{tc['id']}"):
-                                supabase.table("test_cases").update({
-                                    "title": e_title, "test_cycle": e_cycle, "preconditions": e_pre, "steps": e_steps, "expected_result": e_exp
-                                }).eq('id', tc['id']).execute()
-                                st.rerun()
+                                if e_cycle.strip():
+                                    supabase.table("test_cases").update({
+                                        "title": e_title, "test_cycle": e_cycle.strip(), "preconditions": e_pre, "steps": e_steps, "expected_result": e_exp
+                                    }).eq('id', tc['id']).execute()
+                                    st.rerun()
+                                else:
+                                    st.error("O campo Ciclo é obrigatório.")
 
                     with c_clone:
                         if st.button("📋 Clonar para Regressão", key=f"btn_tc_clone_{tc['id']}", help="Duplica o teste como Regressão corrigindo repetições no título"):
@@ -234,7 +244,7 @@ def render_test_cases_tab(project_id: str):
                                 "steps": tc.get('steps', ''),
                                 "expected_result": tc.get('expected_result', ''),
                                 "status": "Não Executado",
-                                "test_cycle": current_cycle 
+                                "test_cycle": active_cycle 
                             }
                             supabase.table("test_cases").insert(clone_payload).execute()
                             st.success("Caso de teste clonado para regressão com sucesso!")
@@ -273,19 +283,26 @@ def render_bug_reports_tab(project_id: str):
     user_info = st.session_state.get("user", {})
     user_role = user_info.get("role", "editor")
     
-    # Campo para definir o ciclo do bug atual
+    # Campo para definir o ciclo do bug atual (obrigatório)
     bug_cycle_input = st.text_input(
-        "🏷️ Ciclo de Teste do Bug / Release:", 
-        value="Geral", 
+        "🏷️ Ciclo de Teste do Bug / Release *", 
+        value="", 
+        placeholder="Ex: Release 1.0, Sprint 12...",
         key="bug_active_cycle_input",
-        help="Informe a release ou ciclo onde este bug foi encontrado."
+        help="⚠️ Campo obrigatório. Informe a release ou ciclo onde este bug foi encontrado."
     )
     
+    active_bug_cycle = bug_cycle_input.strip()
+
+    if not active_bug_cycle:
+        st.warning("💡 **Boa prática de QA:** Por favor, preencha o campo **Ciclo de Teste do Bug / Release** acima para prosseguir.")
+        return # Interrompe a renderização até que o ciclo seja preenchido
+
     with st.expander("🚨 Registrar Novo Bug", expanded=False):
         bug_mode = st.radio("Modo de Registro:", ["Sem IA (Manual)", "Com IA (Automático)"], horizontal=True, key="bug_mode_radio")
         
         if bug_mode == "Com IA (Automático)":
-            st.info(f"💡 A IA analisará os documentos do projeto juntamente com o seu relato para montar o Bug Report atribuído ao ciclo: **{bug_cycle_input}**")
+            st.info(f"💡 A IA analisará os documentos do projeto juntamente com o seu relato para montar o Bug Report atribuído ao ciclo: **{active_bug_cycle}**")
             raw_bug = st.text_area("Descreva o problema encontrado:", key="bug_ai_prompt")
             
             if st.button("✨ Gerar e Salvar Bug Report via IA", type="primary", key="btn_gen_bug_ai"):
@@ -304,7 +321,7 @@ def render_bug_reports_tab(project_id: str):
                                 "expected_behavior": data.get("expected_behavior", ""), 
                                 "actual_behavior": data.get("actual_behavior", ""),
                                 "status": "Aberto",
-                                "test_cycle": bug_cycle_input
+                                "test_cycle": active_bug_cycle
                             }
                             try:
                                 supabase.table("bug_reports").insert(payload).execute()
@@ -335,7 +352,7 @@ def render_bug_reports_tab(project_id: str):
                             "expected_behavior": expected_behavior, 
                             "actual_behavior": actual_behavior,
                             "status": "Aberto",
-                            "test_cycle": bug_cycle_input
+                            "test_cycle": active_bug_cycle
                         }
                         try:
                             supabase.table("bug_reports").insert(payload).execute()
@@ -348,14 +365,12 @@ def render_bug_reports_tab(project_id: str):
 
     st.divider()
     
-    # --- FILTROS DE BUGS (CICLO E STATUS) ---
+    # --- FILTROS DE BUGS (CICLO E STATUS - SEM "GERAL" FIXO) ---
     col_bf1, col_bf2 = st.columns(2)
     with col_bf1:
         existing_bug_cycles_res = supabase.table("bug_reports").select("test_cycle").eq("project_id", project_id).execute()
-        bug_cycles_list = sorted(list(set([row.get("test_cycle", "Geral") for row in (existing_bug_cycles_res.data or [])])))
-        if "Geral" not in bug_cycles_list:
-            bug_cycles_list.insert(0, "Geral")
-            
+        bug_cycles_list = sorted(list(set([row.get("test_cycle") for row in (existing_bug_cycles_res.data or []) if row.get("test_cycle") and row.get("test_cycle").strip()])))
+        
         bug_cycle_filter = st.selectbox("Filtrar por Ciclo do Bug:", ["Todos"] + bug_cycles_list, key="bug_cycle_filter_select")
     
     with col_bf2:
@@ -398,7 +413,7 @@ def render_bug_reports_tab(project_id: str):
         for bug in bugs:
             sev = bug.get("severity", "Média")
             bug_status = bug.get('status', 'Aberto')
-            bug_cycle_tag = bug.get('test_cycle', 'Geral')
+            bug_cycle_tag = bug.get('test_cycle', 'Sem Ciclo')
             sev_color = "🔴" if sev in ["Alta", "Crítica"] else ("🟡" if sev == "Média" else "🟢")
             
             with st.expander(f"{sev_color} [{sev}] ({bug_cycle_tag}) {bug.get('title')} - Status: `{bug_status}`"):
@@ -429,17 +444,20 @@ def render_bug_reports_tab(project_id: str):
                 with c_edit:
                     with st.popover("✏️ Editar", key=f"pop_edit_bug_{bug['id']}"):
                         e_title = st.text_input("Título", value=bug['title'], key=f"e_b_t_{bug['id']}")
-                        e_cycle = st.text_input("Ciclo", value=bug_cycle_tag, key=f"e_b_c_{bug['id']}")
+                        e_cycle = st.text_input("Ciclo *", value=bug_cycle_tag, key=f"e_b_c_{bug['id']}")
                         e_sev = st.selectbox("Severidade", ["Baixa", "Média", "Alta", "Crítica"], index=["Baixa", "Média", "Alta", "Crítica"].index(sev) if sev in ["Baixa", "Média", "Alta", "Crítica"] else 1, key=f"e_b_s_{bug['id']}")
                         e_steps = st.text_area("Passos", value=bug.get('steps', ''), key=f"e_b_st_{bug['id']}")
                         e_exp = st.text_area("Esperado", value=bug.get('expected_behavior', ''), key=f"e_b_ex_{bug['id']}")
                         e_act = st.text_area("Atual", value=bug.get('actual_behavior', ''), key=f"e_b_ac_{bug['id']}")
                         if st.button("Salvar Alterações", key=f"btn_bug_edit_{bug['id']}"):
-                            supabase.table("bug_reports").update({
-                                "title": e_title, "test_cycle": e_cycle, "severity": e_sev, "steps": e_steps,
-                                "expected_behavior": e_exp, "actual_behavior": e_act
-                            }).eq('id', bug['id']).execute()
-                            st.rerun()
+                            if e_cycle.strip():
+                                supabase.table("bug_reports").update({
+                                    "title": e_title, "test_cycle": e_cycle.strip(), "severity": e_sev, "steps": e_steps,
+                                    "expected_behavior": e_exp, "actual_behavior": e_act
+                                }).eq('id', bug['id']).execute()
+                                st.rerun()
+                            else:
+                                st.error("O campo Ciclo é obrigatório.")
                 
                 with c_del:
                     if user_role in ["admin", "owner"]:
