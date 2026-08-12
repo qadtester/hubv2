@@ -154,8 +154,8 @@ def render_projects_page():
 
     with tab_create:
         with st.form("create_project_form", clear_on_submit=True):
-            # Adicionado asterisco vermelho indicando campo obrigatório
-            p_name = st.text_input("Nome do Projeto: :red[*]")
+            # Adicionado o asterisco vermelho indicando preenchimento obrigatório
+            p_name = st.text_input("Nome do Projeto :red[*]")
             p_desc = st.text_area("Descrição do Projeto:")
             
             st.markdown("---")
@@ -169,7 +169,7 @@ def render_projects_page():
             if p_name and p_name.strip():
                 res = supabase.table("projects").insert({
                     "team_id": team_id, 
-                    "name": p_name, 
+                    "name": p_name.strip(), 
                     "description": p_desc
                 }).execute()
                 
@@ -199,11 +199,9 @@ def render_projects_page():
                         except Exception as doc_insert_err:
                             st.warning(f"Projeto criado, mas houve falha ao anexar o documento: {doc_insert_err}")
 
-                    # Mensagem de sucesso detalhada e balões
-                    st.success(f"🎉 Projeto '{p_name}' criado com sucesso e documentação vinculada!")
-                    st.balloons()
-                    
                     st.session_state["current_project_id"] = new_proj_id
+                    st.success(f"Projeto '{p_name}' criado com sucesso!")
+                    st.rerun()
                 else:
                     st.error("Erro ao inserir o projeto no banco de dados.")
             else:
