@@ -74,14 +74,22 @@ with st.sidebar:
     # --- SELETOR DE EQUIPE / ORGANIZAÇÃO ---
     st.subheader("🏢 Organização Ativa")
     team_options = {t["name"]: t["id"] for t in user_teams}
+    
+    # Validação de segurança para evitar ValueError caso o ID ativo mude ou dessincronize
+    active_team_id = active_team.get("id") if active_team else None
+    if active_team_id in team_options.values():
+        default_index = list(team_options.values()).index(active_team_id)
+    else:
+        default_index = 0
+
     selected_team_name = st.selectbox(
         "Alternar Equipe:", 
         options=list(team_options.keys()), 
-        index=list(team_options.values()).index(active_team["id"])
+        index=default_index
     )
     
     # Se o usuário trocou de equipe no selectbox, atualiza a sessão e recarrega
-    if team_options[selected_team_name] != st.session_state["current_team_id"]:
+    if team_options[selected_team_name] != st.session_state.get("current_team_id"):
         st.session_state["current_team_id"] = team_options[selected_team_name]
         st.rerun()
 
