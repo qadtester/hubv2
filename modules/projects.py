@@ -1,3 +1,4 @@
+import streamlit as str_lit
 import streamlit as st
 import io
 from pypdf import PdfReader
@@ -62,6 +63,8 @@ def render_projects_page():
         return
 
     team_id = user_info["team_id"]
+    user_role = user_info.get("role", "editor") # Obtém o papel ativo do usuário na equipe
+    
     tab_list, tab_create = st.tabs(["📌 Meus Projetos", "➕ Criar Novo Projeto"])
 
     with tab_list:
@@ -86,7 +89,6 @@ def render_projects_page():
                     with st.expander("➕ Adicionar Novo Documento ou Texto"):
                         with st.form(key=f"form_add_context_{proj['id']}"):
                             st.write("Envie novos arquivos ou cole textos adicionais. Eles serão salvos no banco para enriquecer a base de conhecimento da IA.")
-                            # Atualizado para aceitar docx e doc além de pdf, txt e csv
                             new_file = st.file_uploader("Novo documento (PDF, DOC, DOCX, TXT, CSV):", type=["pdf", "doc", "docx", "txt", "csv"], key=f"file_{proj['id']}")
                             new_text = st.text_area("Ou adicione observações/regras extras em texto:", placeholder="Cole novas especificações aqui...", key=f"text_{proj['id']}")
                             
@@ -132,18 +134,22 @@ def render_projects_page():
                                 st.rerun()
 
                     with col_del:
-                        with st.popover("🗑️ Excluir Projeto"):
-                            st.warning("⚠️ **Atenção:** Esta ação excluirá permanentemente este projeto e TODOS os requisitos, testes, documentos e riscos associados!")
-                            confirm_text = st.text_input("Digite 'EXCLUIR' para confirmar:", key=f"conf_del_p_{proj['id']}")
-                            if st.button("Confirmar Exclusão", type="primary", key=f"btn_del_p_{proj['id']}"):
-                                if confirm_text == "EXCLUIR":
-                                    supabase.table("projects").delete().eq("id", proj['id']).execute()
-                                    if st.session_state.get("current_project_id") == proj['id']:
-                                        st.session_state["current_project_id"] = None
-                                    st.success("Projeto e dados excluídos com sucesso!")
-                                    st.rerun()
-                                else:
-                                    st.error("Palavra de confirmação incorreta.")
+                        # RESTRIÇÃO DE PERMISSÃO: Apenas admin ou owner podem excluir
+                        if user_role in ["admin", "owner"]:
+                            with st.popover("🗑️ Excluir Projeto"):
+                                st.warning("⚠️ **Atenção:** Esta ação excluirá permanentemente este projeto e TODOS os requisitos, testes, documentos e riscos associados!")
+                                confirm_text = st.text_input("Digite 'EXCLUIR' para confirmar:", key=f"conf_del_p_{proj['id']}")
+                                if st.button("Confirmar Exclusão", type="primary", key=f"btn_del_p_{proj['id']}"):
+                                    if confirm_text == "EXCLUIR":
+                                        supabase.table("projects").delete().eq("id", proj['id']).execute()
+                                        if st.session_state.get("current_project_id") == proj['id']:
+                                            st.session_state["current_project_id"] = None
+                                        st.success("Projeto e dados excluídos com sucesso!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Palavra de confirmação incorreta.")
+                        else:
+                            st.caption("🔒 Exclusão restrita a administradores.")
 
     with tab_create:
         with st.form("create_project_form", clear_on_submit=True):
@@ -152,20 +158,17 @@ def render_projects_page():
             
             st.markdown("---")
             st.markdown("### 🤖 Documentação Inicial (Opcional)")
-            # Atualizado para aceitar docx e doc
             uploaded_file = st.file_uploader("Carregar documento de escopo/requisitos (PDF, DOC, DOCX, TXT, CSV):", type=["pdf", "doc", "docx", "txt", "csv"])
             p_raw_text = st.text_area("Ou cole o texto bruto de requisitos/contexto:", placeholder="Cole aqui os detalhes técnicos...")
 
             if st.form_submit_button("🚀 Criar Projeto"):
                 if p_name:
-                    # 1. Cria o projeto
                     res = supabase.table("projects").insert({
                         "team_id": team_id, 
                         "name": p_name, 
                         "description": p_desc
                     }).execute()
                     
-                    # Se criou com sucesso e há dados de documento/texto, salva na tabela de documentos com tratamento seguro
                     if res.data and (uploaded_file is not None or p_raw_text.strip()):
                         new_proj_id = res.data[0]['id']
                         file_name = "Documento Inicial"
